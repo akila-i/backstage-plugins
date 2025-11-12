@@ -1,0 +1,736 @@
+openapi: 3.0.3
+info:
+  title: OpenChoreo API
+  description: OpenChoreo platform API for managing organizations, projects, components, builds, and deployments
+  version: 1.0.0
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: /
+    description: OpenChoreo API Server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Organization:
+      type: object
+      properties:
+        metadata:
+          type: object
+        spec:
+          type: object
+
+    Project:
+      type: object
+      properties:
+        metadata:
+          type: object
+        spec:
+          type: object
+
+    Component:
+      type: object
+      properties:
+        metadata:
+          type: object
+        spec:
+          type: object
+
+    CompleteComponent:
+      type: object
+      properties:
+        metadata:
+          type: object
+        spec:
+          type: object
+        builds:
+          type: array
+          items:
+            type: object
+        buildTemplates:
+          type: array
+          items:
+            type: object
+
+    Environment:
+      type: object
+      properties:
+        metadata:
+          type: object
+        spec:
+          type: object
+
+    DataPlane:
+      type: object
+      properties:
+        metadata:
+          type: object
+        spec:
+          type: object
+
+    BuildTemplate:
+      type: object
+      properties:
+        metadata:
+          type: object
+        spec:
+          type: object
+
+    Build:
+      type: object
+      properties:
+        metadata:
+          type: object
+        spec:
+          type: object
+
+    Workload:
+      type: object
+      properties:
+        metadata:
+          type: object
+        spec:
+          type: object
+
+    Binding:
+      type: object
+      properties:
+        metadata:
+          type: object
+        spec:
+          type: object
+
+    DeploymentPipeline:
+      type: object
+      properties:
+        stages:
+          type: array
+          items:
+            type: object
+
+    ObserverUrlData:
+      type: object
+      properties:
+        observerUrl:
+          type: string
+
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        message:
+          type: string
+
+    ApiListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+        message:
+          type: string
+
+security:
+  - BearerAuth: []
+
+paths:
+  /orgs:
+    get:
+      summary: List all organizations
+      operationId: listOrganizations
+      tags:
+        - Organizations
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiListResponse'
+
+  /orgs/{orgName}/projects:
+    get:
+      summary: List all projects in an organization
+      operationId: listProjects
+      tags:
+        - Projects
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiListResponse'
+
+    post:
+      summary: Create a new project
+      operationId: createProject
+      tags:
+        - Projects
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                displayName:
+                  type: string
+                description:
+                  type: string
+                deploymentPipeline:
+                  type: object
+      responses:
+        '201':
+          description: Project created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orgs/{orgName}/environments:
+    get:
+      summary: List all environments
+      operationId: listEnvironments
+      tags:
+        - Environments
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiListResponse'
+
+  /orgs/{orgName}/dataplanes:
+    get:
+      summary: List all data planes
+      operationId: listDataPlanes
+      tags:
+        - DataPlanes
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiListResponse'
+
+  /orgs/{orgName}/build-templates:
+    get:
+      summary: List build templates for an organization
+      operationId: listBuildTemplates
+      tags:
+        - Builds
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiListResponse'
+
+  /orgs/{orgName}/projects/{projectName}/components:
+    get:
+      summary: List all components in a project
+      operationId: listComponents
+      tags:
+        - Components
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiListResponse'
+
+    post:
+      summary: Create a new component
+      operationId: createComponent
+      tags:
+        - Components
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                displayName:
+                  type: string
+                description:
+                  type: string
+                buildConfig:
+                  type: object
+      responses:
+        '201':
+          description: Component created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orgs/{orgName}/projects/{projectName}/components/{componentName}:
+    get:
+      summary: Get a specific component
+      operationId: getComponent
+      tags:
+        - Components
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: include
+          in: query
+          required: false
+          schema:
+            type: string
+            default: 'type,workload'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orgs/{orgName}/projects/{projectName}/components/{componentName}/builds:
+    get:
+      summary: List builds for a component
+      operationId: listBuilds
+      tags:
+        - Builds
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiListResponse'
+
+    post:
+      summary: Trigger a new build
+      operationId: triggerBuild
+      tags:
+        - Builds
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: commit
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Build triggered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orgs/{orgName}/projects/{projectName}/components/{componentName}/bindings:
+    get:
+      summary: Get component bindings
+      operationId: getBindings
+      tags:
+        - Bindings
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: environment
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiListResponse'
+
+  /orgs/{orgName}/projects/{projectName}/components/{componentName}/bindings/{bindingName}:
+    patch:
+      summary: Update a component binding
+      operationId: updateBinding
+      tags:
+        - Bindings
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: bindingName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                releaseState:
+                  type: string
+                  enum: ['Active', 'Suspend', 'Undeploy']
+              required:
+                - releaseState
+      responses:
+        '200':
+          description: Binding updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orgs/{orgName}/projects/{projectName}/deployment-pipeline:
+    get:
+      summary: Get project deployment pipeline
+      operationId: getDeploymentPipeline
+      tags:
+        - Deployment
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orgs/{orgName}/projects/{projectName}/components/{componentName}/promote:
+    post:
+      summary: Promote component to environment
+      operationId: promoteComponent
+      tags:
+        - Deployment
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sourceEnv:
+                  type: string
+                targetEnv:
+                  type: string
+              required:
+                - sourceEnv
+                - targetEnv
+      responses:
+        '200':
+          description: Component promoted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orgs/{orgName}/projects/{projectName}/components/{componentName}/workloads:
+    get:
+      summary: Get workload for component
+      operationId: getWorkload
+      tags:
+        - Workloads
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+    post:
+      summary: Create or update workload
+      operationId: createWorkload
+      tags:
+        - Workloads
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Workload created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orgs/{orgName}/projects/{projectName}/components/{componentName}/environments/{environmentName}/observer-url:
+    get:
+      summary: Get runtime logs observer URL
+      operationId: getRuntimeLogsObserverUrl
+      tags:
+        - Observability
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: environmentName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ObserverUrlData'
+
+  /orgs/{orgName}/projects/{projectName}/components/{componentName}/observer-url:
+    get:
+      summary: Get build logs observer URL
+      operationId: getBuildObserverUrl
+      tags:
+        - Observability
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: componentName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ObserverUrlData'
