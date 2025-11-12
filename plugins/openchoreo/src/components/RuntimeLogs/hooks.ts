@@ -12,6 +12,7 @@ import {
   Environment,
   RuntimeLogsFilters,
   RuntimeLogsPagination,
+  LogEntryField,
 } from './types';
 
 export function useEnvironments() {
@@ -67,8 +68,18 @@ export function useRuntimeLogs(
         setLoading(true);
         setError(null);
 
-        const { startTime, endTime } = calculateTimeRange(filters.timeRange);
-        const currentOffset = reset ? 0 : pagination.offset;
+        const { startTime, endTime: initialEndTime } = calculateTimeRange(
+          filters.timeRange,
+        );
+
+        // Use timestamp-based pagination instead of offset
+        let endTime = initialEndTime;
+        if (!reset && logs.length > 0) {
+          // For load more, use the timestamp of the last log as the new endTime
+          // TODO: Modify accordingly when sorting filter is added
+          const lastLog = logs[logs.length - 1];
+          endTime = lastLog.timestamp;
+        }
 
         const response = await getRuntimeLogs(entity, discovery, identity, {
           environmentId:
@@ -79,16 +90,16 @@ export function useRuntimeLogs(
           startTime,
           endTime,
           limit: pagination.limit,
-          offset: currentOffset,
+          offset: 0, // Backend doesn't respect offset, using timestamp-based pagination instead
         });
 
         if (reset) {
           setLogs(response.logs);
+          setTotalCount(response.totalCount);
         } else {
           setLogs(prev => [...prev, ...response.logs]);
         }
 
-        setTotalCount(response.totalCount);
         setHasMore(response.logs.length === pagination.limit);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch logs');
@@ -96,14 +107,14 @@ export function useRuntimeLogs(
         setLoading(false);
       }
     },
-    [entity, discovery, identity, filters, pagination],
+    [entity, discovery, identity, filters, pagination.limit, logs],
   );
 
   const loadMore = useCallback(() => {
-    if (!loading && hasMore && !error) {
+    if (!loading && hasMore && !error && logs.length > 0) {
       fetchLogs(false);
     }
-  }, [fetchLogs, hasMore, loading, error]);
+  }, [fetchLogs, hasMore, loading, error, logs.length]);
 
   const refresh = useCallback(() => {
     setLogs([]);
@@ -176,13 +187,29 @@ export function useInfiniteScroll(
 export function useFilters() {
   const [filters, setFilters] = useState<RuntimeLogsFilters>({
     logLevel: [],
+    selectedFields: [LogEntryField.Log],
     environmentId: '',
     timeRange: '1h',
   });
 
   const updateFilters = useCallback(
     (newFilters: Partial<RuntimeLogsFilters>) => {
-      setFilters(prev => ({ ...prev, ...newFilters }));
+      setFilters(prev => {
+        const updated = { ...prev, ...newFilters };
+
+        // Ensure Log field is always included in selectedFields
+        if (
+          updated.selectedFields &&
+          !updated.selectedFields.includes(LogEntryField.Log)
+        ) {
+          updated.selectedFields = [
+            ...updated.selectedFields,
+            LogEntryField.Log,
+          ];
+        }
+
+        return updated;
+      });
     },
     [],
   );
@@ -190,6 +217,7 @@ export function useFilters() {
   const resetFilters = useCallback(() => {
     setFilters({
       logLevel: [],
+      selectedFields: [LogEntryField.Log],
       environmentId: '',
       timeRange: '1h',
     });

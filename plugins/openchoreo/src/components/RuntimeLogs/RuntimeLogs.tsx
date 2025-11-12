@@ -1,10 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
-import { Box, Typography, Button, Paper } from '@material-ui/core';
+import { useEffect, useRef } from 'react';
+import { Box, Typography, Button } from '@material-ui/core';
 import { Alert } from '@material-ui/lab';
-import { makeStyles } from '@material-ui/core/styles';
-import Refresh from '@material-ui/icons/Refresh';
 import { LogsFilter } from './LogsFilter';
 import { LogsTable } from './LogsTable';
+import { LogsActions } from './LogsActions';
 import {
   useEnvironments,
   useRuntimeLogs,
@@ -12,48 +11,10 @@ import {
   useFilters,
 } from './hooks';
 import { RuntimeLogsPagination } from './types';
-
-const useStyles = makeStyles(theme => ({
-  root: {
-    padding: theme.spacing(3),
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing(3),
-  },
-  title: {
-    fontWeight: 'bold',
-  },
-  refreshButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(1),
-  },
-  errorContainer: {
-    marginBottom: theme.spacing(2),
-  },
-  loadingContainer: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '200px',
-  },
-  statsContainer: {
-    marginBottom: theme.spacing(2),
-    padding: theme.spacing(2),
-  },
-  statItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing(1),
-  },
-}));
+import { useRuntimeLogsStyles } from './styles';
 
 export const RuntimeLogs = () => {
-  const classes = useStyles();
+  const classes = useRuntimeLogsStyles();
   const { filters, updateFilters } = useFilters();
   const {
     environments,
@@ -61,11 +22,13 @@ export const RuntimeLogs = () => {
     error: environmentsError,
   } = useEnvironments();
 
-  const [pagination, setPagination] = useState<RuntimeLogsPagination>({
+  // Pagination config
+  // (offset pagination is not supported by the backend, using timestamp-based pagination instead)
+  const pagination: RuntimeLogsPagination = {
     hasMore: true,
     offset: 0,
     limit: 50,
-  });
+  };
 
   const {
     logs,
@@ -80,8 +43,12 @@ export const RuntimeLogs = () => {
 
   const { loadingRef } = useInfiniteScroll(loadMore, hasMore, logsLoading);
 
-  // Track previous filters to avoid unnecessary fetches
-  const previousFiltersRef = useRef(filters);
+  // Track previous backend-relevant filters to avoid unnecessary fetches
+  const previousBackendFiltersRef = useRef({
+    environmentId: filters.environmentId,
+    logLevel: filters.logLevel,
+    timeRange: filters.timeRange,
+  });
 
   // Auto-select first environment when environments are loaded
   useEffect(() => {
@@ -90,28 +57,28 @@ export const RuntimeLogs = () => {
     }
   }, [environments, filters.environmentId, updateFilters]);
 
-  // Fetch logs when filters change
+  // Fetch logs when backend-relevant filters change
   useEffect(() => {
-    // Only fetch if the filter actually changed
-    const filtersChanged =
-      JSON.stringify(previousFiltersRef.current) !== JSON.stringify(filters);
-    if (filters.environmentId && filtersChanged) {
-      setPagination(prev => ({ ...prev, offset: 0 }));
+    const currentBackendFilters = {
+      environmentId: filters.environmentId,
+      logLevel: filters.logLevel,
+      timeRange: filters.timeRange,
+      // TODO: Sort filter will be added here later
+    };
+
+    // Only fetch if backend-relevant filters changed
+    const backendFiltersChanged =
+      JSON.stringify(previousBackendFiltersRef.current) !==
+      JSON.stringify(currentBackendFilters);
+
+    if (filters.environmentId && backendFiltersChanged) {
       fetchLogs(true);
     }
 
-    previousFiltersRef.current = filters;
-  }, [filters, fetchLogs]);
-
-  // Update pagination offset when loading more
-  useEffect(() => {
-    if (logs.length > 0) {
-      setPagination(prev => ({ ...prev, offset: logs.length }));
-    }
-  }, [logs.length]);
+    previousBackendFiltersRef.current = currentBackendFilters;
+  }, [filters.environmentId, filters.logLevel, filters.timeRange, fetchLogs]);
 
   const handleRefresh = () => {
-    setPagination(prev => ({ ...prev, offset: 0 }));
     refresh();
   };
 
@@ -144,33 +111,11 @@ export const RuntimeLogs = () => {
   };
 
   if (environmentsError) {
-    return (
-      <Box className={classes.root}>
-        <Typography variant="h4" className={classes.title} gutterBottom>
-          Runtime Logs
-        </Typography>
-        {renderError(environmentsError)}
-      </Box>
-    );
+    return <Box>{renderError(environmentsError)}</Box>;
   }
 
   return (
-    <Box className={classes.root}>
-      <Box className={classes.header}>
-        <Typography variant="h4" className={classes.title}>
-          Runtime Logs
-        </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<Refresh />}
-          onClick={handleRefresh}
-          disabled={logsLoading || !filters.environmentId}
-          className={classes.refreshButton}
-        >
-          Refresh
-        </Button>
-      </Box>
-
+    <Box>
       <LogsFilter
         filters={filters}
         onFiltersChange={handleFiltersChange}
@@ -194,43 +139,18 @@ export const RuntimeLogs = () => {
 
       {filters.environmentId && (
         <>
-          {totalCount > 0 && (
-            <Paper className={classes.statsContainer}>
-              <Box className={classes.statItem}>
-                <Typography variant="body2" color="textSecondary">
-                  Total logs found:
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  {totalCount.toLocaleString()}
-                </Typography>
-              </Box>
-              <Box className={classes.statItem}>
-                <Typography variant="body2" color="textSecondary">
-                  Environment:
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  {environments.find(env => env.id === filters.environmentId)
-                    ?.name || filters.environmentId}
-                </Typography>
-              </Box>
-              <Box className={classes.statItem}>
-                <Typography variant="body2" color="textSecondary">
-                  Time range:
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  {filters.timeRange}
-                </Typography>
-              </Box>
-            </Paper>
-          )}
+          <LogsActions
+            totalCount={totalCount}
+            disabled={logsLoading || !filters.environmentId}
+            onRefresh={handleRefresh}
+          />
 
           <LogsTable
+            selectedFields={filters.selectedFields}
             logs={logs}
             loading={logsLoading}
             hasMore={hasMore}
-            totalCount={totalCount}
             loadingRef={loadingRef}
-            onRetry={handleRefresh}
           />
         </>
       )}
