@@ -2,11 +2,32 @@ import { LoggerService } from '@backstage/backend-plugin-api';
 
 import { Project, Component, Connection } from '@wso2/cell-diagram';
 import { CellDiagramService } from '../../types';
-import {
-  DefaultApiClient,
-  ModelsCompleteComponent,
-  Connection as WorkloadConnection,
-} from '@openchoreo/backstage-plugin-api';
+import { createOpenChoreoApiClient } from '@openchoreo/openchoreo-client-node';
+
+interface ModelsCompleteComponent {
+  name: string;
+  type?: string;
+  service?: {
+    apis?: {
+      [key: string]: {
+        rest?: {
+          exposeLevels?: string[];
+        };
+      };
+    };
+  };
+  workload?: {
+    connections?: { [key: string]: WorkloadConnection };
+  };
+}
+
+interface WorkloadConnection {
+  params: {
+    componentName: string;
+    projectName: string;
+    endpoint: string;
+  };
+}
 
 enum ComponentType {
   SERVICE = 'service',
@@ -35,7 +56,7 @@ enum ConnectionType {
  */
 export class CellDiagramInfoService implements CellDiagramService {
   private readonly logger: LoggerService;
-  private readonly client: DefaultApiClient;
+  private readonly baseUrl: string;
 
   /**
    * Private constructor for CellDiagramInfoService.
@@ -45,7 +66,7 @@ export class CellDiagramInfoService implements CellDiagramService {
    * @private
    */
   public constructor(logger: LoggerService, baseUrl: string) {
-    this.client = new DefaultApiClient(baseUrl, {});
+    this.baseUrl = baseUrl;
     this.logger = logger;
   }
 
@@ -64,32 +85,63 @@ export class CellDiagramInfoService implements CellDiagramService {
     orgName: string;
   }): Promise<Project | undefined> {
     try {
-      const response = await this.client.componentsGet({
-        orgName,
-        projectName,
+      const client = createOpenChoreoApiClient({
+        baseUrl: this.baseUrl,
+        logger: this.logger,
       });
 
-      if (!response.ok) {
+      const {
+        data: componentsListData,
+        error: listError,
+        response: listResponse,
+      } = await client.GET(
+        '/orgs/{orgName}/projects/{projectName}/components',
+        {
+          params: {
+            path: { orgName, projectName },
+          },
+        },
+      );
+
+      if (listError || !listResponse.ok) {
         this.logger.error(
           `Failed to fetch components for project ${projectName}`,
         );
         return undefined;
       }
 
-      const componentsData = await response.json();
+      const componentsData = componentsListData as any;
+      if (!componentsData.success || !componentsData.data?.items) {
+        this.logger.warn('No components found in API response');
+        return undefined;
+      }
+
       const completeComponents: ModelsCompleteComponent[] = [];
 
       for (const component of componentsData.data.items) {
         try {
-          const componentResponse = await this.client.componentGet({
-            orgName,
-            projectName,
-            componentName: component.name,
-          });
+          const {
+            data: componentData,
+            error: componentError,
+            response: componentResponse,
+          } = await client.GET(
+            '/orgs/{orgName}/projects/{projectName}/components/{componentName}',
+            {
+              params: {
+                path: {
+                  orgName,
+                  projectName,
+                  componentName: component.name,
+                },
+              },
+            },
+          );
 
-          if (componentResponse.ok) {
-            const componentData = await componentResponse.json();
-            completeComponents.push(componentData.data);
+          if (!componentError && componentResponse.ok) {
+            const apiResponse = componentData as any;
+            if (apiResponse.success && apiResponse.data) {
+              completeComponents.push(apiResponse.data);
+            }
           }
         } catch (error) {
           this.logger.warn(

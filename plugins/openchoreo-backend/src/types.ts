@@ -1,5 +1,4 @@
 import { Project } from '@wso2/cell-diagram';
-import { ModelsWorkload } from '@openchoreo/backstage-plugin-api';
 
 export interface EnvironmentService {
   fetchDeploymentInfo(request: {
@@ -110,13 +109,13 @@ export interface WorkloadService {
     projectName: string;
     componentName: string;
     organizationName: string;
-  }): Promise<ModelsWorkload>;
+  }): Promise<any>;
 
   applyWorkload(request: {
     projectName: string;
     componentName: string;
     organizationName: string;
-    workloadSpec: ModelsWorkload;
+    workloadSpec: any;
   }): Promise<any>;
 }
 
@@ -124,9 +123,8 @@ export interface RuntimeLogsService {
   fetchRuntimeLogs(
     request: {
       componentId: string;
-      namespace: string;
       environmentId: string;
-      logLevels?: string[];
+      logLevels?: ('TRACE' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL')[];
       startTime?: string;
       endTime?: string;
       limit?: number;

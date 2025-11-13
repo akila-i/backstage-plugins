@@ -1,11 +1,58 @@
 import { LoggerService } from '@backstage/backend-plugin-api';
 import { EnvironmentService, Environment, EndpointInfo } from '../../types';
-import {
-  DefaultApiClient,
-  ModelsEnvironment,
-  OpenChoreoApiClient,
-  BindingResponse,
-} from '@openchoreo/backstage-plugin-api';
+import { createOpenChoreoApiClient } from '@openchoreo/openchoreo-client-node';
+
+// Type definitions from API responses
+interface ModelsEnvironment {
+  name: string;
+  displayName?: string;
+  createdAt?: string;
+}
+
+interface BindingResponse {
+  name: string;
+  environment: string;
+  type: string;
+  status?: {
+    status: 'Active' | 'Failed' | 'InProgress' | 'NotYetDeployed' | 'Suspended';
+    message?: string;
+    lastTransitioned?: string;
+  };
+  webApplicationBinding?: {
+    image?: string;
+    endpoints?: BindingEndpoint[];
+  };
+  serviceBinding?: {
+    image?: string;
+    endpoints?: BindingEndpoint[];
+  };
+}
+
+interface BindingEndpoint {
+  name: string;
+  type: string;
+  public?: {
+    scheme: string;
+    host: string;
+    port: number;
+    basePath?: string;
+    uri?: string;
+  };
+  organization?: {
+    scheme: string;
+    host: string;
+    port: number;
+    basePath?: string;
+    uri?: string;
+  };
+  project?: {
+    scheme: string;
+    host: string;
+    port: number;
+    basePath?: string;
+    uri?: string;
+  };
+}
 
 /**
  * Service for managing and retrieving environment-related information for deployments.
@@ -13,14 +60,13 @@ import {
  */
 export class EnvironmentInfoService implements EnvironmentService {
   private readonly logger: LoggerService;
-  private readonly client: OpenChoreoApiClient;
-  private readonly defaultClient: DefaultApiClient;
+  private readonly baseUrl: string;
+  private readonly token?: string;
 
   public constructor(logger: LoggerService, baseUrl: string, token?: string) {
     this.logger = logger;
-    this.client = new OpenChoreoApiClient(baseUrl, token, logger);
-    // Reuse the same defaultClient instance
-    this.defaultClient = new DefaultApiClient(baseUrl, {});
+    this.baseUrl = baseUrl;
+    this.token = token;
   }
 
   static create(
@@ -81,27 +127,74 @@ export class EnvironmentInfoService implements EnvironmentService {
           });
       };
 
+      const client = createOpenChoreoApiClient({
+        baseUrl: this.baseUrl,
+        token: this.token,
+        logger: this.logger,
+      });
+
       const environmentsPromise = createTimedPromise(
-        this.defaultClient.environmentsGet({
-          orgName: request.organizationName,
-        }),
+        (async () => {
+          const { data, error, response } = await client.GET(
+            '/orgs/{orgName}/environments',
+            {
+              params: { path: { orgName: request.organizationName } },
+            },
+          );
+          if (error || !response.ok) {
+            throw new Error(`Failed to fetch environments: ${response.status}`);
+          }
+          return { ok: response.ok, json: async () => data };
+        })(),
         'environments',
       );
 
       const bindingsPromise = createTimedPromise(
-        this.client.getComponentBindings(
-          request.organizationName,
-          request.projectName,
-          request.componentName,
-        ),
+        (async () => {
+          const { data, error, response } = await client.GET(
+            '/orgs/{orgName}/projects/{projectName}/components/{componentName}/bindings',
+            {
+              params: {
+                path: {
+                  orgName: request.organizationName,
+                  projectName: request.projectName,
+                  componentName: request.componentName,
+                },
+              },
+            },
+          );
+          if (error || !response.ok) {
+            throw new Error(`Failed to fetch bindings: ${response.status}`);
+          }
+          const apiResponse = data as any;
+          return apiResponse.success && apiResponse.data?.items
+            ? apiResponse.data.items
+            : [];
+        })(),
         'bindings',
       );
 
       const pipelinePromise = createTimedPromise(
-        this.client.getProjectDeploymentPipeline(
-          request.organizationName,
-          request.projectName,
-        ),
+        (async () => {
+          const { data, error, response } = await client.GET(
+            '/orgs/{orgName}/projects/{projectName}/deployment-pipeline',
+            {
+              params: {
+                path: {
+                  orgName: request.organizationName,
+                  projectName: request.projectName,
+                },
+              },
+            },
+          );
+          if (error || !response.ok) {
+            return null;
+          }
+          const apiResponse = data as any;
+          return apiResponse.success && apiResponse.data
+            ? apiResponse.data
+            : null;
+        })(),
         'pipeline',
       );
 
@@ -563,14 +656,39 @@ export class EnvironmentInfoService implements EnvironmentService {
         `Starting promotion for component: ${request.componentName} from ${request.sourceEnvironment} to ${request.targetEnvironment}`,
       );
 
+      const client = createOpenChoreoApiClient({
+        baseUrl: this.baseUrl,
+        token: this.token,
+        logger: this.logger,
+      });
+
       // Call the promotion API
-      const promotionResult = await this.client.promoteComponent(
-        request.organizationName,
-        request.projectName,
-        request.componentName,
-        request.sourceEnvironment,
-        request.targetEnvironment,
+      const { data, error, response } = await client.POST(
+        '/orgs/{orgName}/projects/{projectName}/components/{componentName}/promote',
+        {
+          params: {
+            path: {
+              orgName: request.organizationName,
+              projectName: request.projectName,
+              componentName: request.componentName,
+            },
+          },
+          body: {
+            sourceEnv: request.sourceEnvironment,
+            targetEnv: request.targetEnvironment,
+          },
+        },
       );
+
+      if (error || !response.ok) {
+        throw new Error(`Failed to promote component: ${response.status}`);
+      }
+
+      const apiResponse = data as any;
+      const promotionResult =
+        apiResponse.success && apiResponse.data?.items
+          ? apiResponse.data.items
+          : [];
 
       this.logger.debug(
         `Promotion completed successfully. Received ${promotionResult.length} binding responses.`,
@@ -625,14 +743,33 @@ export class EnvironmentInfoService implements EnvironmentService {
         `Starting binding update for component: ${request.componentName}, binding: ${request.bindingName}, new state: ${request.releaseState}`,
       );
 
+      const client = createOpenChoreoApiClient({
+        baseUrl: this.baseUrl,
+        token: this.token,
+        logger: this.logger,
+      });
+
       // Call the update binding API
-      await this.client.updateComponentBinding(
-        request.organizationName,
-        request.projectName,
-        request.componentName,
-        request.bindingName,
-        request.releaseState,
+      const { error, response } = await client.PATCH(
+        '/orgs/{orgName}/projects/{projectName}/components/{componentName}/bindings/{bindingName}',
+        {
+          params: {
+            path: {
+              orgName: request.organizationName,
+              projectName: request.projectName,
+              componentName: request.componentName,
+              bindingName: request.bindingName,
+            },
+          },
+          body: {
+            releaseState: request.releaseState,
+          },
+        },
       );
+
+      if (error || !response.ok) {
+        throw new Error(`Failed to update binding: ${response.status}`);
+      }
 
       this.logger.debug(
         `Binding update completed successfully for ${request.bindingName}.`,
