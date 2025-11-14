@@ -7,7 +7,7 @@ import express from 'express';
 import request from 'supertest';
 
 import { createRouter } from './router';
-import { obsServiceRef } from './services/ObsService';
+import { observabilityServiceRef } from './services/ObservabilityService';
 
 const mockTodoItem = {
   title: 'Do the thing',
@@ -20,17 +20,15 @@ const mockTodoItem = {
 // Testing the router directly allows you to write a unit test that mocks the provided options.
 describe('createRouter', () => {
   let app: express.Express;
-  let obsService: jest.Mocked<typeof obsServiceRef.T>;
+  let observabilityService: jest.Mocked<typeof observabilityServiceRef.T>;
 
   beforeEach(async () => {
-    obsService = {
-      createTodo: jest.fn(),
-      listTodos: jest.fn(),
-      getTodo: jest.fn(),
+    observabilityService = {
+      getMetrics: jest.fn(),
     };
     const router = await createRouter({
       httpAuth: mockServices.httpAuth(),
-      obsService,
+      observabilityService,
     });
     app = express();
     app.use(router);
@@ -38,9 +36,9 @@ describe('createRouter', () => {
   });
 
   it('should create a TODO', async () => {
-    obsService.createTodo.mockResolvedValue(mockTodoItem);
+    observabilityService.getMetrics.mockResolvedValue(mockTodoItem);
 
-    const response = await request(app).post('/todos').send({
+    const response = await request(app).get('/metrics').send({
       title: 'Do the thing',
     });
 
@@ -49,18 +47,15 @@ describe('createRouter', () => {
   });
 
   it('should not allow unauthenticated requests to create a TODO', async () => {
-    obsService.createTodo.mockResolvedValue(mockTodoItem);
+    observabilityService.getMetrics.mockResolvedValue(mockTodoItem);
 
     // TEMPLATE NOTE:
     // The HttpAuth mock service considers all requests to be authenticated as a
     // mock user by default. In order to test other cases we need to explicitly
     // pass an authorization header with mock credentials.
     const response = await request(app)
-      .post('/todos')
+      .get('/metrics')
       .set('Authorization', mockCredentials.none.header())
-      .send({
-        title: 'Do the thing',
-      });
 
     expect(response.status).toBe(401);
   });
