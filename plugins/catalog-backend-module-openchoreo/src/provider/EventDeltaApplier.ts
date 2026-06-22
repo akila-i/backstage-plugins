@@ -47,6 +47,10 @@ import {
   translateNewWorkflowToEntity,
 } from '../utils/entityTranslation';
 import {
+  collectPipelineEnvNames,
+  dataPlaneRunsCilium,
+} from '../utils/wirelogs';
+import {
   getCreatedAt,
   getDescription,
   getDisplayName,
@@ -471,6 +475,52 @@ export class EventDeltaApplier {
     );
   }
 
+  /**
+   * Single-component equivalent of the periodic sync's wirelogs gate: returns
+   * true when any environment of the component's project resolves to a
+   * DataPlane running Cilium. Walks project → deployment pipeline →
+   * environments → DataPlanes via the API. Best-effort — any fetch failure
+   * yields the safe default of `false` (Wirelogs tab hidden); the next full
+   * sync re-evaluates. Changes to a DataPlane's Cilium status are picked up by
+   * the periodic sync rather than cascaded here.
+   */
+  private async computeWirelogsEnabled(
+    client: OpenChoreoApiClient,
+    ns: string,
+    projectName: string,
+    project: NewProject | undefined,
+  ): Promise<boolean> {
+    try {
+      const proj =
+        project ?? (await this.fetchProject(client, ns, projectName));
+      const pipelineName = proj?.spec?.deploymentPipelineRef?.name;
+      if (!pipelineName) return false;
+      const pipeline = await this.fetchDeploymentPipeline(
+        client,
+        ns,
+        pipelineName,
+      );
+      for (const envName of collectPipelineEnvNames(pipeline)) {
+        const env = await this.fetchEnvironment(client, ns, envName);
+        const ref = env?.spec?.dataPlaneRef;
+        if (!ref?.name) continue;
+        const annotations =
+          (ref.kind ?? 'DataPlane') === 'ClusterDataPlane'
+            ? (await this.fetchClusterDataPlane(client, ref.name))?.metadata
+                ?.annotations
+            : (await this.fetchDataPlane(client, ns, ref.name))?.metadata
+                ?.annotations;
+        if (dataPlaneRunsCilium(annotations)) return true;
+      }
+      return false;
+    } catch (err) {
+      this.logger.warn(
+        `Failed to compute wirelogs availability for project ${ns}/${projectName}: ${err}`,
+      );
+      return false;
+    }
+  }
+
   private fetchClusterComponentType(client: OpenChoreoApiClient, name: string) {
     return this.fetchOne<NewClusterComponentType>(
       client.GET('/api/v1/clustercomponenttypes/{cctName}', {
@@ -707,6 +757,13 @@ export class EventDeltaApplier {
 
     const workloadName = workload?.metadata?.name;
 
+    const wirelogsEnabled = await this.computeWirelogsEnabled(
+      client,
+      ns,
+      projectName,
+      project,
+    );
+
     const componentEntity = translateNewComponentToEntity(
       component,
       ns,
@@ -717,6 +774,7 @@ export class EventDeltaApplier {
       consumesApis,
       workloadName,
       buildComponentDependsOnRefs(resourceDependencies, ns),
+      wirelogsEnabled,
     );
 
     // API entities exist only because a Workload exposes schema-bearing

@@ -22,6 +22,7 @@ import {
 import { EntityRelationWarning } from './EntityRelationWarning';
 import { OpenChoreoAboutCard } from './OpenChoreoAboutCard';
 import {
+  CHOREO_ANNOTATIONS,
   CHOREO_LABELS,
   ComponentTypeUtils,
   type PageVariant,
@@ -203,6 +204,13 @@ const hasApis = (entity: Entity) =>
 const hasTechdocsAnnotation = (entity: Entity) =>
   Boolean(entity.metadata.annotations?.['backstage.io/techdocs-ref']);
 
+// Wirelogs stream from Cilium Hubble, so the tab is only useful when one of
+// the project's environments runs Cilium. The catalog sync stamps this
+// annotation on the Component entity; absent/false hides the tab (the common
+// case for core OpenChoreo, where no DataPlane runs Cilium).
+const hasWirelogsEnabled = (entity: Entity) =>
+  entity.metadata.annotations?.[CHOREO_ANNOTATIONS.WIRELOGS_ENABLED] === 'true';
+
 /** Custom columns for API cards: no Owner, System renamed to Project */
 const apiCardColumns: TableColumn<ApiEntity>[] = [
   EntityTable.columns.createEntityRefColumn({ defaultKind: 'API' }),
@@ -366,7 +374,11 @@ const serviceEntityPage = (
       </FeatureGatedContent>
     </EntityLayout.Route>
 
-    <EntityLayout.Route path="/wirelogs" title="Wirelogs">
+    <EntityLayout.Route
+      path="/wirelogs"
+      title="Wirelogs"
+      if={hasWirelogsEnabled}
+    >
       <FeatureGatedContent feature="observability">
         <ObservabilityWirelogs />
       </FeatureGatedContent>
@@ -473,7 +485,11 @@ const genericComponentEntityPage = (
       </FeatureGatedContent>
     </EntityLayout.Route>
 
-    <EntityLayout.Route path="/wirelogs" title="Wirelogs">
+    <EntityLayout.Route
+      path="/wirelogs"
+      title="Wirelogs"
+      if={hasWirelogsEnabled}
+    >
       <FeatureGatedContent feature="observability">
         <ObservabilityWirelogs />
       </FeatureGatedContent>

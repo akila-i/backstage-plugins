@@ -602,4 +602,43 @@ describe('translateNewComponentToEntity — spec.dependsOn', () => {
 
     expect((entity.spec as any).dependsOn).toBeUndefined();
   });
+
+  it('stamps wirelogs-enabled from the trailing flag (default false)', () => {
+    const base = {
+      apiVersion: 'openchoreo.dev/v1alpha1',
+      kind: 'Component',
+      metadata: { name: 'api', namespace: 'finance' } as any,
+      spec: {
+        componentType: { kind: 'ComponentType', name: 'service' },
+        owner: { projectName: 'analytics' },
+      } as any,
+    } as any;
+
+    const enabled = translateNewComponentToEntity(
+      base,
+      'finance',
+      'analytics',
+      'group:default/owner',
+      ctx as any,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    expect(
+      enabled.metadata.annotations?.['openchoreo.io/wirelogs-enabled'],
+    ).toBe('true');
+
+    const defaulted = translateNewComponentToEntity(
+      base,
+      'finance',
+      'analytics',
+      'group:default/owner',
+      ctx as any,
+    );
+    expect(
+      defaulted.metadata.annotations?.['openchoreo.io/wirelogs-enabled'],
+    ).toBe('false');
+  });
 });

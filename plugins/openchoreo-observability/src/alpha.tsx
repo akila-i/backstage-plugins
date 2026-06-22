@@ -6,6 +6,8 @@ import {
   fetchApiRef,
 } from '@backstage/frontend-plugin-api';
 import { EntityContentBlueprint } from '@backstage/plugin-catalog-react/alpha';
+import { type Entity } from '@backstage/catalog-model';
+import { CHOREO_ANNOTATIONS } from '@openchoreo/backstage-plugin-common';
 import { FeatureGatedContent } from '@openchoreo/backstage-plugin-react';
 
 import { rootRouteRef } from './routes';
@@ -166,7 +168,14 @@ const wirelogsEntityContent = EntityContentBlueprint.make({
   params: {
     path: '/wirelogs',
     title: 'Wirelogs',
-    filter: 'kind:component',
+    // Wirelogs stream from Cilium Hubble, so the tab is hidden unless one of
+    // the project's environments runs Cilium. The catalog sync stamps
+    // `wirelogs-enabled` on the Component entity (see EntityPage.tsx, which is
+    // the authoritative render path; this keeps the blueprint filter aligned).
+    filter: (entity: Entity) =>
+      entity.kind.toLowerCase() === 'component' &&
+      entity.metadata.annotations?.[CHOREO_ANNOTATIONS.WIRELOGS_ENABLED] ===
+        'true',
     loader: () =>
       import('./components/Wirelogs/ObservabilityWirelogsPage').then(m => (
         <FeatureGatedContent feature="observability">
