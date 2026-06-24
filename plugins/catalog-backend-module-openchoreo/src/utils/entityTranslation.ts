@@ -1225,13 +1225,6 @@ export function translateNewComponentToEntity(
    * Resource refs use the form `resource:<namespace>/<name>`.
    */
   dependsOn?: string[],
-  /**
-   * Whether any environment of the component's project resolves to a DataPlane
-   * running Cilium. Stamped as `openchoreo.io/wirelogs-enabled` so the UI can
-   * synchronously decide whether to render the component-level Wirelogs tab.
-   * Defaults to `false` (tab hidden) when availability can't be determined.
-   */
-  wirelogsEnabled: boolean = false,
 ): Entity {
   const componentName = getName(component)!;
   const componentTypeRef = component.spec?.componentType;
@@ -1279,10 +1272,6 @@ export function translateNewComponentToEntity(
       [CHOREO_ANNOTATIONS.WORKLOAD]: workloadName,
     };
   }
-  entity.metadata.annotations = {
-    ...(entity.metadata.annotations ?? {}),
-    [CHOREO_ANNOTATIONS.WIRELOGS_ENABLED]: wirelogsEnabled ? 'true' : 'false',
-  };
   return entity;
 }
 

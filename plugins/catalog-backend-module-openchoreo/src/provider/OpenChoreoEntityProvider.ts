@@ -60,13 +60,6 @@ import {
   translateNewWorkflowToEntity,
 } from '../utils/entityTranslation';
 import { createAuthenticatedOpenChoreoApiClient } from '../utils/openChoreoApiClient';
-import {
-  collectPipelineEnvNames,
-  dataPlaneKey,
-  dataPlaneRunsCilium,
-  projectHasCiliumEnvironment,
-  type WirelogsCiliumIndex,
-} from '../utils/wirelogs';
 import { EventDeltaApplier } from './EventDeltaApplier';
 
 // Lightweight aliases used inside runNew. The full new-API type set lives
@@ -344,16 +337,6 @@ export class OpenChoreoEntityProvider implements EntityProvider {
       );
       allEntities.push(...domainEntities);
 
-      // Wirelogs (Cilium) availability index. Populated as environments,
-      // dataplanes and deployment pipelines are fetched below, then consulted
-      // when building each Component entity so the component-level Wirelogs
-      // tab is hidden unless one of the project's environments runs Cilium.
-      const wirelogsIndex: WirelogsCiliumIndex = {
-        envDpRefByNs: new Map(),
-        ciliumByDpKey: new Map(),
-        pipelineEnvsByKey: new Map(),
-      };
-
       // Get environments for each namespace
       for (const ns of namespaces) {
         const nsName = getName(ns)!;
@@ -381,19 +364,6 @@ export class OpenChoreoEntityProvider implements EntityProvider {
             ),
           );
           allEntities.push(...environmentEntities);
-
-          // Index each env's DataPlane ref for the wirelogs availability check.
-          const envRefMap = new Map<string, { kind: string; name: string }>();
-          for (const env of environments) {
-            const ref = env.spec?.dataPlaneRef;
-            if (ref?.name) {
-              envRefMap.set(getName(env)!, {
-                kind: ref.kind ?? 'DataPlane',
-                name: ref.name,
-              });
-            }
-          }
-          wirelogsIndex.envDpRefByNs.set(nsName, envRefMap);
         } catch (error) {
           this.logger.warn(
             `Failed to fetch environments for namespace ${nsName}: ${error}`,
@@ -428,67 +398,11 @@ export class OpenChoreoEntityProvider implements EntityProvider {
             translateNewDataplaneToEntity(dp, nsName, this.translatorContext),
           );
           allEntities.push(...dataplaneEntities);
-
-          // Index each DataPlane's Cilium status for the wirelogs check.
-          for (const dp of dataplanes) {
-            wirelogsIndex.ciliumByDpKey.set(
-              dataPlaneKey('DataPlane', getName(dp)!, nsName),
-              dataPlaneRunsCilium(dp.metadata?.annotations),
-            );
-          }
         } catch (error) {
           this.logger.warn(
             `Failed to fetch dataplanes for namespace ${nsName}: ${error}`,
           );
         }
-      }
-
-      // Fetch cluster dataplanes (once, not per namespace). Done here, before
-      // projects/components are built, so their Cilium status is available for
-      // the wirelogs check on ClusterDataPlane-backed environments.
-      try {
-        const clusterDataplanes = await fetchAllPages<NewClusterDataPlane>(
-          cursor =>
-            client
-              .GET('/api/v1/clusterdataplanes', {
-                params: { query: { limit: 100, cursor } },
-              })
-              .then(res => {
-                if (res.error)
-                  throw new Error('Failed to fetch cluster dataplanes');
-                return res.data;
-              }),
-        );
-
-        this.logger.debug(
-          `Found ${clusterDataplanes.length} cluster dataplanes`,
-        );
-
-        const cdpEntities: Entity[] = clusterDataplanes
-          .map(cdp => {
-            try {
-              return translateNewClusterDataplaneToEntity(
-                cdp,
-                this.translatorContext,
-              ) as Entity;
-            } catch (err) {
-              this.logger.warn(
-                `Failed to translate ClusterDataPlane ${getName(cdp)}: ${err}`,
-              );
-              return null;
-            }
-          })
-          .filter((e): e is Entity => e !== null);
-        allEntities.push(...cdpEntities);
-
-        for (const cdp of clusterDataplanes) {
-          wirelogsIndex.ciliumByDpKey.set(
-            dataPlaneKey('ClusterDataPlane', getName(cdp)!),
-            dataPlaneRunsCilium(cdp.metadata?.annotations),
-          );
-        }
-      } catch (error) {
-        this.logger.warn(`Failed to fetch cluster dataplanes: ${error}`);
       }
 
       // Get workflowplanes for each namespace
@@ -641,12 +555,6 @@ export class OpenChoreoEntityProvider implements EntityProvider {
                 this.translatorContext,
               );
               pipelineMap.set(pipelineKey, pipelineEntity);
-
-              // Index the pipeline's environments for the wirelogs check.
-              wirelogsIndex.pipelineEnvsByKey.set(
-                pipelineKey,
-                collectPipelineEnvNames(pipeline),
-              );
             }
           } catch (error) {
             this.logger.warn(
@@ -804,12 +712,6 @@ export class OpenChoreoEntityProvider implements EntityProvider {
               nsName,
             );
 
-            const wirelogsEnabled = projectHasCiliumEnvironment(
-              nsName,
-              project.spec?.deploymentPipelineRef?.name,
-              wirelogsIndex,
-            );
-
             const componentEntity = translateNewComponentToEntity(
               component,
               nsName,
@@ -820,7 +722,6 @@ export class OpenChoreoEntityProvider implements EntityProvider {
               consumesApis,
               workloadName,
               dependsOn,
-              wirelogsEnabled,
             );
             allEntities.push(componentEntity);
 
@@ -1562,6 +1463,45 @@ export class OpenChoreoEntityProvider implements EntityProvider {
         allEntities.push(...cwfEntities);
       } catch (error) {
         this.logger.warn(`Failed to fetch cluster workflows: ${error}`);
+      }
+
+      // Fetch cluster dataplanes (once, not per namespace)
+      try {
+        const clusterDataplanes = await fetchAllPages<NewClusterDataPlane>(
+          cursor =>
+            client
+              .GET('/api/v1/clusterdataplanes', {
+                params: { query: { limit: 100, cursor } },
+              })
+              .then(res => {
+                if (res.error)
+                  throw new Error('Failed to fetch cluster dataplanes');
+                return res.data;
+              }),
+        );
+
+        this.logger.debug(
+          `Found ${clusterDataplanes.length} cluster dataplanes`,
+        );
+
+        const cdpEntities: Entity[] = clusterDataplanes
+          .map(cdp => {
+            try {
+              return translateNewClusterDataplaneToEntity(
+                cdp,
+                this.translatorContext,
+              ) as Entity;
+            } catch (err) {
+              this.logger.warn(
+                `Failed to translate ClusterDataPlane ${getName(cdp)}: ${err}`,
+              );
+              return null;
+            }
+          })
+          .filter((e): e is Entity => e !== null);
+        allEntities.push(...cdpEntities);
+      } catch (error) {
+        this.logger.warn(`Failed to fetch cluster dataplanes: ${error}`);
       }
 
       // Fetch cluster observability planes (once, not per namespace)

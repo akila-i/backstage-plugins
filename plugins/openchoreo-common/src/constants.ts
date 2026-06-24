@@ -49,11 +49,6 @@ export const CHOREO_ANNOTATIONS = {
   // Observability
   OBSERVABILITY_PLANE_REF: 'openchoreo.io/observability-plane-ref',
   OBSERVER_URL: 'openchoreo.io/observer-url',
-  // Wirelogs (Cilium network observability) availability for a component,
-  // computed at catalog-sync time from the DataPlanes backing the project's
-  // environments. Read synchronously by the UI to show/hide the
-  // component-level Wirelogs tab ('true' | 'false').
-  WIRELOGS_ENABLED: 'openchoreo.io/wirelogs-enabled',
   // Data plane reference kind (DataPlane vs ClusterDataPlane)
   DATA_PLANE_REF_KIND: 'openchoreo.io/data-plane-ref-kind',
   // Workflow plane reference (on Workflow/ClusterWorkflow entities)

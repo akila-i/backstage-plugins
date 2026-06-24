@@ -1,20 +1,11 @@
-import {
-  Entity,
-  parseEntityRef,
-  stringifyEntityRef,
-  RELATION_HAS_PART,
-} from '@backstage/catalog-model';
+import { Entity, stringifyEntityRef } from '@backstage/catalog-model';
 import { AuthService, LoggerService } from '@backstage/backend-plugin-api';
 import {
   CatalogService,
   EntityProviderConnection,
 } from '@backstage/plugin-catalog-node';
 import { type OpenChoreoComponents } from '@openchoreo/openchoreo-client-node';
-import {
-  CHOREO_ANNOTATIONS,
-  RELATION_DEPLOYED_BY,
-  RELATION_PIPELINE_USED_BY,
-} from '@openchoreo/backstage-plugin-common';
+import { CHOREO_ANNOTATIONS } from '@openchoreo/backstage-plugin-common';
 import {
   createAuthenticatedOpenChoreoApiClient,
   OpenChoreoApiClient,
@@ -55,10 +46,6 @@ import {
   translateNewWorkflowPlaneToEntity,
   translateNewWorkflowToEntity,
 } from '../utils/entityTranslation';
-import {
-  collectPipelineEnvNames,
-  dataPlaneRunsCilium,
-} from '../utils/wirelogs';
 import {
   getCreatedAt,
   getDescription,
@@ -484,200 +471,6 @@ export class EventDeltaApplier {
     );
   }
 
-  /**
-   * Single-component equivalent of the periodic sync's wirelogs gate: returns
-   * true when any environment of the component's project resolves to a
-   * DataPlane running Cilium. Walks project → deployment pipeline →
-   * environments → DataPlanes via the API. Best-effort — any fetch failure
-   * yields the safe default of `false` (Wirelogs tab hidden); the next full
-   * sync re-evaluates. Changes to a DataPlane's Cilium status are picked up by
-   * the periodic sync rather than cascaded here.
-   */
-  private async computeWirelogsEnabled(
-    client: OpenChoreoApiClient,
-    ns: string,
-    projectName: string,
-    project: NewProject | undefined,
-  ): Promise<boolean> {
-    try {
-      const proj =
-        project ?? (await this.fetchProject(client, ns, projectName));
-      const pipelineName = proj?.spec?.deploymentPipelineRef?.name;
-      if (!pipelineName) return false;
-      const pipeline = await this.fetchDeploymentPipeline(
-        client,
-        ns,
-        pipelineName,
-      );
-      for (const envName of collectPipelineEnvNames(pipeline)) {
-        const env = await this.fetchEnvironment(client, ns, envName);
-        const ref = env?.spec?.dataPlaneRef;
-        if (!ref?.name) continue;
-        const annotations =
-          (ref.kind ?? 'DataPlane') === 'ClusterDataPlane'
-            ? (await this.fetchClusterDataPlane(client, ref.name))?.metadata
-                ?.annotations
-            : (await this.fetchDataPlane(client, ns, ref.name))?.metadata
-                ?.annotations;
-        if (dataPlaneRunsCilium(annotations)) return true;
-      }
-      return false;
-    } catch (err) {
-      this.logger.warn(
-        `Failed to compute wirelogs availability for project ${ns}/${projectName}: ${err}`,
-      );
-      return false;
-    }
-  }
-
-  /** Unique target refs of a given relation type across the supplied entities. */
-  private collectRelationTargets(entities: Entity[], type: string): string[] {
-    const refs = new Set<string>();
-    for (const entity of entities) {
-      for (const relation of entity.relations ?? []) {
-        if (relation.type === type) refs.add(relation.targetRef);
-      }
-    }
-    return [...refs];
-  }
-
-  /**
-   * Propagates a DataPlane / ClusterDataPlane Cilium-annotation change to the
-   * Component entities whose Wirelogs tab visibility depends on it, so the UI
-   * reacts to the event instead of waiting for the next periodic full sync.
-   *
-   * Walks the already-synced catalog relation graph:
-   *   Environment (data-plane-ref) -> deployedBy -> DeploymentPipeline
-   *     -> pipelineUsedBy -> System (project) -> hasPart -> Component
-   * recomputes each affected project's wirelogs value once, then re-emits only
-   * the Components whose stamped `openchoreo.io/wirelogs-enabled` actually
-   * flips. Best-effort: with no CatalogService wired (or on any error) it's a
-   * no-op and the periodic full sync reconciles. Runs on create/update only —
-   * a DataPlane deletion early-returns before this and is reconciled by the
-   * full sync.
-   */
-  private async cascadeWirelogsForDataPlane(
-    dpKind: 'DataPlane' | 'ClusterDataPlane',
-    dpName: string,
-    ns?: string,
-  ): Promise<void> {
-    if (!this.catalogService || !this.auth) {
-      this.logger.debug(
-        `DataPlane ${dpName} changed but no CatalogService is wired; Wirelogs tab visibility will reconcile on the next full sync.`,
-      );
-      return;
-    }
-
-    try {
-      const options = {
-        credentials: await this.auth.getOwnServiceCredentials(),
-      };
-
-      // 1. Environments backed by this DataPlane. The catalog stamps
-      //    `openchoreo.io/data-plane-ref` (+ `-ref-kind`) on each Environment.
-      const refNameKey = 'metadata.annotations.openchoreo.io/data-plane-ref';
-      const refKindKey = `metadata.annotations.${CHOREO_ANNOTATIONS.DATA_PLANE_REF_KIND}`;
-      const filter: Record<string, string> = {
-        kind: 'Environment',
-        [refNameKey]: dpName,
-      };
-      if (dpKind === 'ClusterDataPlane') {
-        filter[refKindKey] = 'ClusterDataPlane';
-      } else if (ns) {
-        filter['metadata.namespace'] = ns;
-      }
-
-      let envs = (await this.catalogService.getEntities({ filter }, options))
-        .items;
-      // A namespaced DataPlane and a ClusterDataPlane can share a name; for the
-      // namespaced case drop any env that actually points at a ClusterDataPlane.
-      if (dpKind === 'DataPlane') {
-        envs = envs.filter(
-          e =>
-            e.metadata.annotations?.[CHOREO_ANNOTATIONS.DATA_PLANE_REF_KIND] !==
-            'ClusterDataPlane',
-        );
-      }
-      if (envs.length === 0) return;
-
-      // 2. Environment -> DeploymentPipeline -> System (project).
-      const pipelineRefs = this.collectRelationTargets(
-        envs,
-        RELATION_DEPLOYED_BY,
-      );
-      if (pipelineRefs.length === 0) return;
-      const pipelines = (
-        await this.catalogService.getEntitiesByRefs(
-          { entityRefs: pipelineRefs },
-          options,
-        )
-      ).items.filter((e): e is Entity => Boolean(e));
-
-      const projectRefs = this.collectRelationTargets(
-        pipelines,
-        RELATION_PIPELINE_USED_BY,
-      );
-      if (projectRefs.length === 0) return;
-      const projects = (
-        await this.catalogService.getEntitiesByRefs(
-          { entityRefs: projectRefs },
-          options,
-        )
-      ).items.filter((e): e is Entity => Boolean(e));
-      if (projects.length === 0) return;
-
-      // 3. Per project: compute the new value once, re-emit only flipped comps.
-      const client = await this.createApiClient();
-      let refreshed = 0;
-      for (const project of projects) {
-        const componentRefs = this.collectRelationTargets(
-          [project],
-          RELATION_HAS_PART,
-        ).filter(ref => parseEntityRef(ref).kind === 'component');
-        if (componentRefs.length === 0) continue;
-
-        const newValue = await this.computeWirelogsEnabled(
-          client,
-          project.metadata.namespace ?? 'default',
-          project.metadata.name,
-          undefined,
-        );
-
-        const components = (
-          await this.catalogService.getEntitiesByRefs(
-            { entityRefs: componentRefs },
-            options,
-          )
-        ).items.filter((e): e is Entity => Boolean(e));
-
-        for (const component of components) {
-          const current =
-            component.metadata.annotations?.[
-              CHOREO_ANNOTATIONS.WIRELOGS_ENABLED
-            ] === 'true';
-          if (current === newValue) continue;
-          await this.refreshComponent(
-            component.metadata.namespace ?? 'default',
-            component.metadata.name,
-            undefined,
-            newValue,
-          );
-          refreshed += 1;
-        }
-      }
-
-      if (refreshed > 0) {
-        this.logger.info(
-          `${dpKind} ${dpName} Cilium change: refreshed ${refreshed} component(s) for Wirelogs tab visibility.`,
-        );
-      }
-    } catch (err) {
-      this.logger.warn(
-        `Failed to cascade Wirelogs visibility for ${dpKind} ${dpName}; periodic full sync will reconcile: ${err}`,
-      );
-    }
-  }
-
   private fetchClusterComponentType(client: OpenChoreoApiClient, name: string) {
     return this.fetchOne<NewClusterComponentType>(
       client.GET('/api/v1/clustercomponenttypes/{cctName}', {
@@ -799,10 +592,6 @@ export class EventDeltaApplier {
     // resource. When omitted (component-event path), we look the
     // workload up by component name as before.
     preFetchedWorkload?: NewWorkload,
-    // When the DataPlane cascade has already computed the project-level
-    // wirelogs value, pass it here to skip the per-component recompute (the
-    // value is identical for every component in a project).
-    wirelogsEnabledOverride?: boolean,
   ): Promise<void> {
     const client = await this.createApiClient();
     const component = await this.fetchComponent(client, ns, name);
@@ -918,10 +707,6 @@ export class EventDeltaApplier {
 
     const workloadName = workload?.metadata?.name;
 
-    const wirelogsEnabled =
-      wirelogsEnabledOverride ??
-      (await this.computeWirelogsEnabled(client, ns, projectName, project));
-
     const componentEntity = translateNewComponentToEntity(
       component,
       ns,
@@ -932,7 +717,6 @@ export class EventDeltaApplier {
       consumesApis,
       workloadName,
       buildComponentDependsOnRefs(resourceDependencies, ns),
-      wirelogsEnabled,
     );
 
     // API entities exist only because a Workload exposes schema-bearing
@@ -979,7 +763,6 @@ export class EventDeltaApplier {
     await this.upsertEntities([
       translateNewDataplaneToEntity(dp, ns, this.translatorContext),
     ]);
-    await this.cascadeWirelogsForDataPlane('DataPlane', name, ns);
   }
 
   private async refreshWorkflowPlane(ns: string, name: string): Promise<void> {
@@ -1481,7 +1264,6 @@ export class EventDeltaApplier {
         this.translatorContext,
       ) as Entity,
     ]);
-    await this.cascadeWirelogsForDataPlane('ClusterDataPlane', name);
   }
 
   private async refreshClusterObservabilityPlane(name: string): Promise<void> {
