@@ -34,10 +34,4 @@ export const useStyles = makeStyles(theme => ({
     marginBottom: theme.spacing(1),
     fontWeight: 600,
   },
-  headerRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(1),
-    marginBottom: theme.spacing(1),
-  },
 }));

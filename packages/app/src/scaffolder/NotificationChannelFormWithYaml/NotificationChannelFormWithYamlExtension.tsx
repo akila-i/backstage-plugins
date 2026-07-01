@@ -5,18 +5,14 @@ import {
   Grid,
   TextField,
   MenuItem,
-  IconButton,
   Switch,
   Box,
   Typography,
-  Button,
 } from '@material-ui/core';
-import DeleteIcon from '@material-ui/icons/Delete';
-import AddIcon from '@material-ui/icons/Add';
 import { useApi } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { YamlEditor } from '@openchoreo/backstage-plugin-react';
-import { FormYamlToggle } from '@openchoreo/backstage-design-system';
+import { FormYamlToggle, RjsfForm } from '@openchoreo/backstage-design-system';
 import YAML from 'yaml';
 import { useStyles } from './styles';
 import {
@@ -50,6 +46,38 @@ export interface NotificationChannelWebhookConfigFormData {
   headers: WebhookHeaderFormData[];
   payloadTemplate: string;
 }
+
+// Sub-schema for the webhook headers array, rendered via RjsfForm so it gets
+// the same editable-card UX (title, confirm/cancel/delete) as other array
+// fields in the app, e.g. Build Env on the component creation form.
+const HEADERS_SCHEMA = {
+  type: 'object',
+  properties: {
+    headers: {
+      type: 'array',
+      title: 'Headers',
+      description: 'Optional HTTP headers to send with the webhook request',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', title: 'Header Name' },
+          value: {
+            type: 'string',
+            title: 'Inline Value',
+            description: 'Leave empty if sourcing from a secret',
+          },
+          secretName: {
+            type: 'string',
+            title: 'Secret Name',
+            description:
+              'Kubernetes Secret name (used instead of an inline value)',
+          },
+          secretKey: { type: 'string', title: 'Secret Key' },
+        },
+      },
+    },
+  },
+} as const;
 
 export interface NotificationChannelFormData {
   namespace_name: string;
@@ -381,16 +409,6 @@ export const NotificationChannelFormWithYamlExtension = ({
     [data, commit],
   );
 
-  const updateHeader = useCallback(
-    (index: number, patch: Partial<WebhookHeaderFormData>) => {
-      const headers = data.webhookConfig.headers.map((h, i) =>
-        i === index ? { ...h, ...patch } : h,
-      );
-      updateWebhookField('headers', headers);
-    },
-    [data.webhookConfig.headers, updateWebhookField],
-  );
-
   const handleModeChange = useCallback(
     (newMode: 'form' | 'yaml') => {
       if (newMode === mode) return;
@@ -712,74 +730,14 @@ export const NotificationChannelFormWithYamlExtension = ({
                   />
                 </Grid>
                 <Grid item xs={12}>
-                  <Typography variant="body2" color="textSecondary">
-                    Headers
-                  </Typography>
-                  {data.webhookConfig.headers.map((header, index) => (
-                    <div key={index} className={classes.headerRow}>
-                      <TextField
-                        label="Name"
-                        value={header.name}
-                        onChange={e =>
-                          updateHeader(index, { name: e.target.value })
-                        }
-                        variant="outlined"
-                        size="small"
-                      />
-                      <TextField
-                        label="Inline Value"
-                        value={header.value}
-                        onChange={e =>
-                          updateHeader(index, { value: e.target.value })
-                        }
-                        variant="outlined"
-                        size="small"
-                      />
-                      <TextField
-                        label="Secret Name"
-                        value={header.secretName}
-                        onChange={e =>
-                          updateHeader(index, { secretName: e.target.value })
-                        }
-                        variant="outlined"
-                        size="small"
-                      />
-                      <TextField
-                        label="Secret Key"
-                        value={header.secretKey}
-                        onChange={e =>
-                          updateHeader(index, { secretKey: e.target.value })
-                        }
-                        variant="outlined"
-                        size="small"
-                      />
-                      <IconButton
-                        size="small"
-                        onClick={() =>
-                          updateWebhookField(
-                            'headers',
-                            data.webhookConfig.headers.filter(
-                              (_, i) => i !== index,
-                            ),
-                          )
-                        }
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </div>
-                  ))}
-                  <Button
-                    size="small"
-                    startIcon={<AddIcon />}
-                    onClick={() =>
-                      updateWebhookField('headers', [
-                        ...data.webhookConfig.headers,
-                        { name: '', value: '', secretName: '', secretKey: '' },
-                      ])
+                  <RjsfForm
+                    schema={HEADERS_SCHEMA}
+                    formData={{ headers: data.webhookConfig.headers }}
+                    onChange={e =>
+                      updateWebhookField('headers', e.formData?.headers ?? [])
                     }
-                  >
-                    Add Header
-                  </Button>
+                    tagName="div"
+                  />
                 </Grid>
                 <Grid item xs={12}>
                   <TextField
