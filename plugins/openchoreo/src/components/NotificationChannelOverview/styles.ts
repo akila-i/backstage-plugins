@@ -30,7 +30,7 @@ export const useNotificationChannelOverviewStyles = makeStyles(theme => ({
     textTransform: 'uppercase',
     padding: theme.spacing(0.25, 1),
     borderRadius: theme.spacing(0.5),
-    backgroundColor: theme.palette.primary.light,
+    backgroundColor: theme.palette.primary.main,
     color: theme.palette.primary.contrastText,
   },
   defaultBadge: {
