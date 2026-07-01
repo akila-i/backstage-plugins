@@ -15,6 +15,8 @@ import {
   RELATION_DEPLOYED_BY,
   RELATION_USES_PIPELINE,
   RELATION_PIPELINE_USED_BY,
+  RELATION_NOTIFIES,
+  RELATION_NOTIFIED_BY,
 } from '@openchoreo/backstage-plugin-common';
 
 import { ClusterComponentTypeEntityProcessor } from './ClusterComponentTypeEntityProcessor';
@@ -239,7 +241,7 @@ describe('ObservabilityAlertsNotificationChannelEntityProcessor', () => {
       ).rejects.toThrow('spec.environment');
     });
 
-    it('emits partOf/hasPart relations to the target Environment', async () => {
+    it('emits notifiedBy/notifies relations to the target Environment', async () => {
       const emit = jest.fn();
       const entity = {
         kind: 'ObservabilityAlertsNotificationChannel',
@@ -255,7 +257,7 @@ describe('ObservabilityAlertsNotificationChannelEntityProcessor', () => {
             name: 'ch',
           },
           target: { kind: 'environment', namespace: 'my-ns', name: 'dev' },
-          type: RELATION_PART_OF,
+          type: RELATION_NOTIFIED_BY,
         }),
       );
       expect(emit).toHaveBeenCalledWith(
@@ -266,7 +268,7 @@ describe('ObservabilityAlertsNotificationChannelEntityProcessor', () => {
             namespace: 'my-ns',
             name: 'ch',
           },
-          type: RELATION_HAS_PART,
+          type: RELATION_NOTIFIES,
         }),
       );
     });

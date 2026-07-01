@@ -4,7 +4,10 @@ import {
   processingResult,
 } from '@backstage/plugin-catalog-node';
 import { LocationSpec } from '@backstage/plugin-catalog-common';
-import { RELATION_HAS_PART, RELATION_PART_OF } from '@backstage/catalog-model';
+import {
+  RELATION_NOTIFIED_BY,
+  RELATION_NOTIFIES,
+} from '@openchoreo/backstage-plugin-common';
 import { ObservabilityAlertsNotificationChannelEntityV1alpha1 } from '../kinds/ObservabilityAlertsNotificationChannelEntityV1alpha1';
 
 /**
@@ -46,7 +49,7 @@ export class ObservabilityAlertsNotificationChannelEntityProcessor
         name: entity.metadata.name,
       };
 
-      // Emit partOf/hasPart relationship to the target Environment
+      // Emit notifies/notifiedBy relationship to the target Environment
       const environmentRef = {
         kind: 'environment',
         namespace: entity.metadata.namespace || 'default',
@@ -56,14 +59,14 @@ export class ObservabilityAlertsNotificationChannelEntityProcessor
         processingResult.relation({
           source: sourceRef,
           target: environmentRef,
-          type: RELATION_PART_OF,
+          type: RELATION_NOTIFIED_BY,
         }),
       );
       emit(
         processingResult.relation({
           source: environmentRef,
           target: sourceRef,
-          type: RELATION_HAS_PART,
+          type: RELATION_NOTIFIES,
         }),
       );
     }

@@ -17,6 +17,8 @@ export {
   RELATION_WORKFLOW_USED_BY,
   RELATION_BUILDS_ON,
   RELATION_BUILDS,
+  RELATION_NOTIFIES,
+  RELATION_NOTIFIED_BY,
 } from './constants';
 
 // Permissions

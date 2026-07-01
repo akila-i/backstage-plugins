@@ -59,6 +59,8 @@ import {
   RELATION_HOSTS,
   RELATION_OBSERVED_BY,
   RELATION_OBSERVES,
+  RELATION_NOTIFIES,
+  RELATION_NOTIFIED_BY,
   RELATION_USES_WORKFLOW,
   RELATION_WORKFLOW_USED_BY,
   RELATION_BUILDS_ON,
@@ -926,6 +928,8 @@ const environmentPage = (
               RELATION_DEPLOYED_BY,
               RELATION_HOSTED_ON,
               RELATION_HOSTS,
+              RELATION_NOTIFIES,
+              RELATION_NOTIFIED_BY,
             ]}
             renderNode={CustomGraphNode}
           />
@@ -940,7 +944,7 @@ const environmentPage = (
 
 const notificationChannelPage = (
   <EntityLayoutWithDelete
-    parentEntityRelations={['partOf']}
+    parentEntityRelations={['notifiedBy']}
     kindDisplayNames={PLATFORM_KIND_DISPLAY_NAMES}
   >
     <OpenChoreoEntityLayout.Route path="/" title="Overview">
@@ -955,7 +959,7 @@ const notificationChannelPage = (
         <Grid item md={6} xs={12}>
           <EntityCatalogGraphCard
             height={400}
-            relations={[RELATION_PART_OF, RELATION_HAS_PART]}
+            relations={[RELATION_NOTIFIES, RELATION_NOTIFIED_BY]}
             renderNode={CustomGraphNode}
           />
         </Grid>
