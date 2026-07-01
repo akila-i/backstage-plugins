@@ -387,6 +387,10 @@ export {
   type UseEnvironmentPermissionResult,
 } from './hooks/useEnvironmentPermission';
 export {
+  useNotificationChannelPermission,
+  type UseNotificationChannelPermissionResult,
+} from './hooks/useNotificationChannelPermission';
+export {
   useDeploymentPipelinePermission,
   type UseDeploymentPipelinePermissionResult,
 } from './hooks/useDeploymentPipelinePermission';
