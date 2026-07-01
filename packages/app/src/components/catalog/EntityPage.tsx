@@ -90,6 +90,7 @@ import {
   DataplaneStatusCard,
   DataplaneEnvironmentsCard,
   DataplaneGatewayConfigurationCard,
+  NotificationChannelConfigCard,
   ClusterDataplaneStatusCard,
   ClusterDataplaneEnvironmentsCard,
   ClusterDataplaneGatewayConfigurationCard,
@@ -181,6 +182,7 @@ const PLATFORM_KIND_DISPLAY_NAMES: Record<string, string> = {
   observabilityplane: 'Observability Plane',
   clusterobservabilityplane: 'Cluster Observability Plane',
   environment: 'Environment',
+  observabilityalertsnotificationchannel: 'Notification Channel',
   deploymentpipeline: 'Deployment Pipeline',
   componenttype: 'Component Type',
   resourcetype: 'Resource Type',
@@ -936,6 +938,35 @@ const environmentPage = (
   </EntityLayoutWithDelete>
 );
 
+const notificationChannelPage = (
+  <EntityLayoutWithDelete
+    parentEntityRelations={['partOf']}
+    kindDisplayNames={PLATFORM_KIND_DISPLAY_NAMES}
+  >
+    <OpenChoreoEntityLayout.Route path="/" title="Overview">
+      <Grid container spacing={3} alignItems="stretch">
+        {entityWarningContent}
+        <Grid item xs={12}>
+          <NotificationChannelConfigCard />
+        </Grid>
+        <Grid item md={6} xs={12}>
+          <OpenChoreoAboutCard variant="gridItem" showEditIcon />
+        </Grid>
+        <Grid item md={6} xs={12}>
+          <EntityCatalogGraphCard
+            height={400}
+            relations={[RELATION_PART_OF, RELATION_HAS_PART]}
+            renderNode={CustomGraphNode}
+          />
+        </Grid>
+      </Grid>
+    </OpenChoreoEntityLayout.Route>
+    <OpenChoreoEntityLayout.Route path="/definition" title="Definition">
+      <ResourceDefinitionTab />
+    </OpenChoreoEntityLayout.Route>
+  </EntityLayoutWithDelete>
+);
+
 const dataplanePage = (
   <EntityLayoutWithDelete
     parentEntityRelations={['partOf']}
@@ -1493,6 +1524,10 @@ export const entityPage = (
     <EntitySwitch.Case if={isKind('domain')} children={domainPage} />
     <EntitySwitch.Case if={isKind('resource')} children={resourcePage} />
     <EntitySwitch.Case if={isKind('environment')} children={environmentPage} />
+    <EntitySwitch.Case
+      if={isKind('observabilityalertsnotificationchannel')}
+      children={notificationChannelPage}
+    />
     <EntitySwitch.Case if={isKind('dataplane')} children={dataplanePage} />
     <EntitySwitch.Case if={isKind('clusterdataplane')}>
       {clusterDataplanePage}

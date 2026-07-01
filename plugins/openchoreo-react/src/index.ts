@@ -395,6 +395,10 @@ export {
   type UseEnvironmentReadPermissionResult,
 } from './hooks/useEnvironmentReadPermission';
 export {
+  useNotificationChannelReadPermission,
+  type UseNotificationChannelReadPermissionResult,
+} from './hooks/useNotificationChannelReadPermission';
+export {
   useUndeployPermission,
   type UseUndeployPermissionResult,
 } from './hooks/useUndeployPermission';
