@@ -944,7 +944,7 @@ const environmentPage = (
 
 const notificationChannelPage = (
   <EntityLayoutWithDelete
-    parentEntityRelations={['notifiedBy']}
+    parentEntityRelations={['notifiedBy', 'partOf']}
     kindDisplayNames={PLATFORM_KIND_DISPLAY_NAMES}
   >
     <OpenChoreoEntityLayout.Route path="/" title="Overview">
